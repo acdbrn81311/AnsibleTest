@@ -1,0 +1,30 @@
+- name: Ansible Test
+  hosts: QA-RedisCommunity
+  serial:
+  - 1
+  tasks:
+  - name: upgrade all packages
+    yum: name='*' state=latest
+
+  - name: Check for reboot hint.
+    shell: LAST_KERNEL=$(rpm -q --last kernel | awk 'NR==1{sub(/kernel-/,""); print $1}'); CURRENT_KERNEL=$(uname -r); if [ $LAST_KERNEL != $CURRENT_KERNEL ]; then echo 'reboot'; else echo 'no'; fi
+    ignore_errors: true
+    register: reboot_hint
+
+  - name: Rebooting ...
+    command: shutdown -r now "Reboot required for updated kernel"
+    async: 0
+    poll: 0
+    sudo: true
+    ignore_errors: true
+    when: reboot_hint.stdout.find("reboot") != -1
+    register: rebooting
+
+  - name: wait for the services to restart
+    local_action: wait_for host={{ inventory_hostname }}
+      port=22
+      delay=15
+      timeout=900
+      state=started
+      connect_timeout=15
+
